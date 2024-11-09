@@ -2,8 +2,10 @@ package com.samjakob.spigui.menu;
 
 import com.samjakob.spigui.SpiGUI;
 import com.samjakob.spigui.buttons.SGButton;
+import com.samjakob.spigui.toolbar.SGBarTemplate;
 import com.samjakob.spigui.toolbar.SGToolbarBuilder;
 import com.samjakob.spigui.toolbar.SGToolbarButtonType;
+import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -13,6 +15,8 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryView;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
@@ -26,14 +30,47 @@ import java.util.Set;
  */
 public class SGMenuListener implements Listener {
 
-    /** The plugin that this listener is registered for. */
+    /**
+     * Any click types not in this array will be immediately prevented in
+     * SpiGUI inventories without further processing (i.e., the button's
+     * listener will not be called).
+     */
+    private static final ClickType[] PERMITTED_MENU_CLICK_TYPES = new ClickType[]{
+            ClickType.LEFT,
+            ClickType.RIGHT,
+    };
+
+    /**
+     * Any actions in this list will be blocked immediately without further
+     * processing if they occur in a SpiGUI menu.
+     */
+    private static final InventoryAction[] BLOCKED_MENU_ACTIONS = new InventoryAction[]{
+            InventoryAction.MOVE_TO_OTHER_INVENTORY,
+            InventoryAction.COLLECT_TO_CURSOR,
+    };
+
+    /**
+     * Any actions in this list will be blocked if they occur in the adjacent
+     * inventory to an SGMenu.
+     */
+    private static final InventoryAction[] BLOCKED_ADJACENT_ACTIONS = new InventoryAction[]{
+            InventoryAction.MOVE_TO_OTHER_INVENTORY,
+            InventoryAction.COLLECT_TO_CURSOR,
+    };
+
+    /**
+     * The plugin that this listener is registered for.
+     */
     private final JavaPlugin owner;
-    /** The instance of {@link SpiGUI} this listener is operating for. */
+    /**
+     * The instance of {@link SpiGUI} this listener is operating for.
+     */
     private final SpiGUI spiGUI;
 
     /**
      * Initialize an SGMenuListener for the specified plugin.
-     * @param owner The plugin that this listener is registered for.
+     *
+     * @param owner  The plugin that this listener is registered for.
      * @param spiGUI The instance of {@link SpiGUI} this listener is operating
      *               for.
      */
@@ -61,8 +98,8 @@ public class SGMenuListener implements Listener {
         // negate that to return false if it is (because a valid SGMenu
         // should be handled by the library).
         return !(inventory != null &&
-                 inventory.getHolder() != null &&
-                 inventory.getHolder() instanceof SGMenu);
+                inventory.getHolder() != null &&
+                inventory.getHolder() instanceof SGMenu);
     }
 
     /**
@@ -77,7 +114,7 @@ public class SGMenuListener implements Listener {
      * It needs to be passed in here so that SpiGUI can check whether
      * the {@link SGMenu} inventory belongs to your plugin.
      *
-     * @param plugin The {@link JavaPlugin} plugin instance.
+     * @param plugin    The {@link JavaPlugin} plugin instance.
      * @param inventory The inventory to check.
      * @return True if it will, otherwise false.
      */
@@ -105,25 +142,28 @@ public class SGMenuListener implements Listener {
      */
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
+
         // This should only run for SpiGUI menus, so if the clicked
         // inventory was not a SpiGUI menu (i.e., an SGMenu), don't
         // continue.
         if (shouldIgnoreInventoryEvent(event.getClickedInventory())) return;
 
-        // Get the instance of the SpiGUI that was clicked.
-        SGMenu clickedGui = (SGMenu) event.getClickedInventory().getHolder();
-
         // If the click type is not permitted, instantly deny the event and
         // do nothing else.
-        if (clickedGui.getPermittedMenuClickTypes().stream().noneMatch(type -> type == event.getClick())) {
+        if (Arrays.stream(PERMITTED_MENU_CLICK_TYPES).noneMatch(type -> type == event.getClick())) {
             event.setResult(Event.Result.DENY);
             return;
         }
 
-        // If the action is blocked, instantly deny the event
-        if (clickedGui.getBlockedMenuActions().stream().anyMatch(action -> action == event.getAction())) {
+        // If the action is blocked, instantly deny the event and do nothing
+        // else.
+        if (Arrays.stream(BLOCKED_MENU_ACTIONS).anyMatch(action -> action == event.getAction())) {
             event.setResult(Event.Result.DENY);
+            return;
         }
+
+        // Get the instance of the SpiGUI that was clicked.
+        SGMenu clickedGui = (SGMenu) event.getClickedInventory().getHolder();
 
         // Check if the GUI is owner by the current plugin
         // (if not, it'll be deferred to the SGMenuListener registered
@@ -143,8 +183,23 @@ public class SGMenuListener implements Listener {
         }
 
         // If the slot is on the pagination row, get the appropriate pagination handler.
+        if (!clickedGui.getBarTemplateList().isEmpty() && event.getSlot() < 9) {
+            List<SGBarTemplate> barRows = clickedGui.getBarTemplateList();
+//            SGBarTemplateBuilder barTemplateBuilder = clickedGui.getBarTemplate();
+
+            barRows.forEach(bar -> {
+                SGButton barTemplateButton = bar.buildBarTemplateButton(event.getSlot(), clickedGui.getCurrentPage(), clickedGui, spiGUI, (Player) event.getWhoClicked());
+                if (barTemplateButton != null && barTemplateButton.getListener() != null) {
+                    barTemplateButton.getListener().onClick(event);
+                }
+            });
+            return;
+        }
         if (event.getSlot() > clickedGui.getPageSize()) {
             int offset = event.getSlot() - clickedGui.getPageSize();
+            if (!clickedGui.getBarTemplateList().isEmpty()) {
+                offset -= 9 * clickedGui.getBarTemplateList().size();
+            }
             SGToolbarBuilder paginationButtonBuilder = spiGUI.getDefaultToolbarBuilder();
 
             if (clickedGui.getToolbarBuilder() != null) {
@@ -153,7 +208,9 @@ public class SGMenuListener implements Listener {
 
             SGToolbarButtonType buttonType = SGToolbarButtonType.getDefaultForSlot(offset);
             SGButton paginationButton = paginationButtonBuilder.buildToolbarButton(offset, clickedGui.getCurrentPage(), buttonType, clickedGui);
-            if (paginationButton != null) paginationButton.getListener().onClick(event);
+            if (paginationButton != null) {
+                paginationButton.getListener().onClick(event);
+            }
             return;
         }
 
@@ -164,8 +221,9 @@ public class SGMenuListener implements Listener {
             return;
         }
 
+        int offset = clickedGui.getStartRow() * 9;
         // Otherwise, get the button normally.
-        SGButton button = clickedGui.getButton(clickedGui.getCurrentPage(), event.getSlot());
+        SGButton button = clickedGui.getButton(clickedGui.getCurrentPage(), event.getSlot() - offset);
         if (button != null && button.getListener() != null) {
             button.getListener().onClick(event);
         }
@@ -183,6 +241,7 @@ public class SGMenuListener implements Listener {
      */
     @EventHandler(priority = EventPriority.LOWEST)
     public void onAdjacentInventoryClick(InventoryClickEvent event) {
+
         // If the clicked inventory is not adjacent to a SpiGUI menu, ignore
         // the click event.
         if (event.getView().getTopInventory() == null ||
@@ -192,14 +251,12 @@ public class SGMenuListener implements Listener {
         // ignore the click event.
         if (event.getClickedInventory() == event.getView().getTopInventory()) return;
 
-        // Get the instance of the SpiGUI that was clicked.
-        SGMenu clickedGui = (SGMenu) event.getClickedInventory().getHolder();
-
         // If the clicked inventory is not a SpiGUI menu, block the event if
         // it is one of the blocked actions.
-        if (clickedGui.getBlockedAdjacentActions().stream().anyMatch(action -> action == event.getAction())) {
+        if (Arrays.stream(BLOCKED_ADJACENT_ACTIONS).anyMatch(action -> action == event.getAction())) {
             event.setResult(Event.Result.DENY);
         }
+
     }
 
     /**
@@ -278,10 +335,11 @@ public class SGMenuListener implements Listener {
     /**
      * Checks whether the specified set of slots includes any slots in the
      * top inventory of the specified {@link InventoryView}.
-     * @param view The relevant {@link InventoryView}.
+     *
+     * @param view  The relevant {@link InventoryView}.
      * @param slots The set of slots to check.
      * @return True if the set of slots includes any slots in the top
-     *         inventory, otherwise false.
+     * inventory, otherwise false.
      */
     private boolean slotsIncludeTopInventory(InventoryView view, Set<Integer> slots) {
         return slots.stream().anyMatch(slot -> {
