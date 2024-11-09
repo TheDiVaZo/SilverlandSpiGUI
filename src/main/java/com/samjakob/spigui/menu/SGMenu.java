@@ -2,13 +2,11 @@ package com.samjakob.spigui.menu;
 
 import com.samjakob.spigui.SpiGUI;
 import com.samjakob.spigui.buttons.SGButton;
-import com.samjakob.spigui.toolbar.SGToolbarBuilder;
-import com.samjakob.spigui.toolbar.SGToolbarButtonType;
+import com.samjakob.spigui.toolbar.*;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.entity.HumanEntity;
-import org.bukkit.event.inventory.ClickType;
-import org.bukkit.event.inventory.InventoryAction;
+import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -25,7 +23,7 @@ import java.util.function.Consumer;
  * <br><br>
  * You do not instantiate this class when you need it - as you would
  * have done with the older version of the library - rather you make a
- * call to {@link SpiGUI#create(String, int)} or {@link SpiGUI#create(String, int, String)}
+ * call to {@link SpiGUI#create(String, int)} (or {@link SpiGUI#create(String, int, String, boolean)})
  * from your plugin's {@link SpiGUI} instance.
  * <br><br>
  * This creates an inventory that is already associated with your plugin.
@@ -34,24 +32,48 @@ import java.util.function.Consumer;
  */
 public class SGMenu implements InventoryHolder {
 
-    /** The plugin (owner of the SpiGUI instance) that created this inventory. */
+    private final HashMap<UUID, SGMenu> currentMenus = new HashMap<>();
+
+    /**
+     * The plugin (owner of the SpiGUI instance) that created this inventory.
+     */
     private final JavaPlugin owner;
-    /** The SpiGUI instance that created this inventory. */
+    /**
+     * The SpiGUI instance that created this inventory.
+     */
     private final SpiGUI spiGUI;
 
-    /** The title of the inventory. */
+    /**
+     * The title of the inventory.
+     */
     private String name;
-    /** A tag that may be used to identify the type of inventory. */
+    /**
+     * A tag that may be used to identify the type of inventory.
+     */
     private String tag;
-    /** The number of rows to display per page. */
+    /**
+     * The number of rows to display per page.
+     */
     private int rowsPerPage;
 
-    /** The map of items in the inventory. */
+    private int startRow = 0;
+
+    private int maxPage;
+
+    private boolean isAutomaticMaxPage;
+
+    /**
+     * The map of items in the inventory.
+     */
     private final Map<Integer, SGButton> items;
-    /** The set of sticky slots (that should remain when the page is changed). */
+    /**
+     * The set of sticky slots (that should remain when the page is changed).
+     */
     private final HashSet<Integer> stickiedSlots;
 
-    /** The currently selected page of the inventory. */
+    /**
+     * The currently selected page of the inventory.
+     */
     private int currentPage;
     /**
      * Whether the "default" behaviors and interactions should be permitted or
@@ -65,72 +87,37 @@ public class SGMenu implements InventoryHolder {
      */
     private boolean enableAutomaticPagination;
 
-    /** The toolbar builder used to render this GUI's toolbar. */
+    /**
+     * The toolbar builder used to render this GUI's toolbar.
+     */
     private SGToolbarBuilder toolbarBuilder;
-    /** The action to be performed on close. */
+
+//    private SGBarTemplate barTemplate;
+    private List<SGBarTemplate> barTemplateList = new ArrayList<>();
+    /**
+     * The action to be performed on close.
+     */
     private Consumer<SGMenu> onClose;
-    /** The action to be performed on page change. */
+    /**
+     * The action to be performed on page change.
+     */
     private Consumer<SGMenu> onPageChange;
 
     /**
-     * Any click types not in this array will be immediately prevented in
-     * this menu without further processing (i.e., the button's
-     * listener will not be called).
-     */
-    private HashSet<ClickType> permittedMenuClickTypes;
-
-    /**
-     * Any actions in this list will be blocked immediately without further
-     * processing if they occur in a SpiGUI menu.
-     */
-    private HashSet<InventoryAction> blockedMenuActions;
-
-    /**
-     * Any actions in this list will be blocked if they occur in the adjacent
-     * inventory to an SGMenu.
-     */
-    private HashSet<InventoryAction> blockedAdjacentActions;
-
-    /// DEFAULT PERMITTED / BLOCKED ACTIONS ///
-
-    /**
-     * The default set of actions that are permitted if they occur in an SGMenu.
-     */
-    private static final ClickType[] DEFAULT_PERMITTED_MENU_CLICK_TYPES = new ClickType[]{
-            ClickType.LEFT,
-            ClickType.RIGHT
-    };
-
-    /**
-     * The default set of actions that are blocked if they occur in an SGMenu.
-     */
-    private static final InventoryAction[] DEFAULT_BLOCKED_MENU_ACTIONS = new InventoryAction[] {
-            InventoryAction.MOVE_TO_OTHER_INVENTORY,
-            InventoryAction.COLLECT_TO_CURSOR
-    };
-
-    /**
-     * The default set of actions that are blocked if they occur in the adjacent
-     * inventory to an SGMenu.
-     */
-    private static final InventoryAction[] DEFAULT_BLOCKED_ADJACENT_ACTIONS = new InventoryAction[] {
-            InventoryAction.MOVE_TO_OTHER_INVENTORY,
-            InventoryAction.COLLECT_TO_CURSOR
-    };
-
-    /**
-     * <b>Intended for internal use only. Use {@link SpiGUI#create(String, int)} or {@link SpiGUI#create(String, int, String)}!</b><br>
+     * <b>Intended for internal use only. Use {@link SpiGUI#create(String, int)} or {@link SpiGUI#create(String, int, String, boolean)}!</b><br>
      * Used by the library internally to construct an SGMenu.
      * <br>
      * The name parameter is color code translated.
      *
-     * @param owner                      The JavaPlugin that owns this menu.
-     * @param spiGUI                     The SpiGUI instance associated with this menu.
-     * @param name                       The name of the menu.
-     * @param rowsPerPage                The number of rows per page in the menu.
-     * @param tag                        The tag associated with this menu.
+     * @param owner       The plugin the inventory should be associated with.
+     * @param spiGUI      The SpiGUI that created this inventory.
+     * @param name        The display name of the inventory.
+     * @param rowsPerPage The number of rows per page.
+     * @param tag         The inventory's tag.
+     * @see SpiGUI#create(String, int)
+     * @see SpiGUI#create(String, int, String, boolean)
      */
-    public SGMenu(JavaPlugin owner, SpiGUI spiGUI, String name, int rowsPerPage, String tag) {
+    public SGMenu(JavaPlugin owner, SpiGUI spiGUI, String name, int rowsPerPage, String tag, boolean isAutomaticMaxPage) {
         this.owner = owner;
         this.spiGUI = spiGUI;
         this.name = ChatColor.translateAlternateColorCodes('&', name);
@@ -141,6 +128,8 @@ public class SGMenu implements InventoryHolder {
         this.stickiedSlots = new HashSet<>();
 
         this.currentPage = 0;
+
+        this.isAutomaticMaxPage = isAutomaticMaxPage;
     }
 
     /// INVENTORY SETTINGS ///
@@ -148,8 +137,8 @@ public class SGMenu implements InventoryHolder {
     /**
      * This is a per-inventory version of {@link SpiGUI#setBlockDefaultInteractions(boolean)}.
      *
-     * @see SpiGUI#setBlockDefaultInteractions(boolean)
      * @param blockDefaultInteractions Whether the default behavior of click events should be cancelled.
+     * @see SpiGUI#setBlockDefaultInteractions(boolean)
      */
     public void setBlockDefaultInteractions(boolean blockDefaultInteractions) {
         this.blockDefaultInteractions = blockDefaultInteractions;
@@ -158,8 +147,8 @@ public class SGMenu implements InventoryHolder {
     /**
      * This is a per-inventory version of {@link SpiGUI#areDefaultInteractionsBlocked()}.
      *
-     * @see SpiGUI#areDefaultInteractionsBlocked()
      * @return Whether the default behavior of click events should be cancelled.
+     * @see SpiGUI#areDefaultInteractionsBlocked()
      */
     public Boolean areDefaultInteractionsBlocked() {
         return blockDefaultInteractions;
@@ -169,8 +158,8 @@ public class SGMenu implements InventoryHolder {
      * This is a per-inventory version of {@link SpiGUI#setEnableAutomaticPagination(boolean)}.
      * If this value is set, it overrides the per-plugin option set in {@link SpiGUI}.
      *
-     * @see SpiGUI#setEnableAutomaticPagination(boolean)
      * @param enableAutomaticPagination Whether pagination buttons should be automatically added.
+     * @see SpiGUI#setEnableAutomaticPagination(boolean)
      */
     public void setAutomaticPaginationEnabled(boolean enableAutomaticPagination) {
         this.enableAutomaticPagination = enableAutomaticPagination;
@@ -179,28 +168,60 @@ public class SGMenu implements InventoryHolder {
     /**
      * This is a per-inventory version of {@link SpiGUI#isAutomaticPaginationEnabled()}.
      *
-     * @see SpiGUI#isAutomaticPaginationEnabled()
      * @return Whether pagination buttons should be automatically added.
+     * @see SpiGUI#isAutomaticPaginationEnabled()
      */
     public Boolean isAutomaticPaginationEnabled() {
         return enableAutomaticPagination;
     }
 
+    public boolean isAutomaticMaxPage() {
+        return isAutomaticMaxPage;
+    }
+
+    public void setAutomaticMaxPage(boolean automaticMaxPage) {
+        isAutomaticMaxPage = automaticMaxPage;
+    }
+
     /**
      * This is a per-inventory version of ({@link SpiGUI#setDefaultToolbarBuilder(SGToolbarBuilder)}).
      *
-     * @see SpiGUI#setDefaultToolbarBuilder(SGToolbarBuilder)
      * @param toolbarBuilder The default toolbar builder used for GUIs.
+     * @see SpiGUI#setDefaultToolbarBuilder(SGToolbarBuilder)
      */
     public void setToolbarBuilder(SGToolbarBuilder toolbarBuilder) {
         this.toolbarBuilder = toolbarBuilder;
     }
 
+//    public void setBarTemplate(SGBarTemplate barTemplate) {
+//        this.barTemplate = barTemplate;
+////        setStartRow(getStartRow() + 1);
+//        setStartRow(1);
+//    }
+
+    public void setBarTemplateList(List<SGBarTemplate> barTemplateList) {
+        this.barTemplateList = barTemplateList;
+//        setStartRow(getStartRow() + 1);
+        setStartRow(barTemplateList.size());
+    }
+
+//    public SGBarTemplateBuilder getBarTemplateBuilder() {
+//        return barTemplate.getBuilder();
+//    }
+
+//    public SGBarTemplate getBarTemplate() {
+//        return barTemplate;
+//    }
+
+    public List<SGBarTemplate> getBarTemplateList() {
+        return barTemplateList;
+    }
+
     /**
      * This is a per-inventory version of ({@link SpiGUI#getDefaultToolbarBuilder()}).
      *
-     * @see SpiGUI#getDefaultToolbarBuilder()
      * @return The default toolbar builder used for GUIs.
+     * @see SpiGUI#getDefaultToolbarBuilder()
      */
     public SGToolbarBuilder getToolbarBuilder() {
         return this.toolbarBuilder;
@@ -245,6 +266,14 @@ public class SGMenu implements InventoryHolder {
         return rowsPerPage * 9;
     }
 
+    public int getStartRow() {
+        return startRow;
+    }
+
+    public void setStartRow(int startRow) {
+        this.startRow = startRow;
+    }
+
     /**
      * Sets the number of rows per page of the inventory.
      * <br>
@@ -277,9 +306,9 @@ public class SGMenu implements InventoryHolder {
     /**
      * This sets the GUI's tag.
      *
+     * @param tag The GUI's tag.
      * @see #getTag()
      * @see SpiGUI#findOpenWithTag(String)
-     * @param tag The GUI's tag.
      */
     public void setTag(String tag) {
         this.tag = tag;
@@ -358,9 +387,9 @@ public class SGMenu implements InventoryHolder {
      * pagination will be automatically applied when the inventory is
      * rendered. An alternative to this is to use {@link #setButton(int, int, SGButton)}.
      *
-     * @see #setButton(int, int, SGButton)
-     * @param slot The desired location of the button.
+     * @param slot   The desired location of the button.
      * @param button The button to add.
+     * @see #setButton(int, int, SGButton)
      */
     public void setButton(int slot, SGButton button) {
         items.put(slot, button);
@@ -377,10 +406,10 @@ public class SGMenu implements InventoryHolder {
      * <br>
      * If the slot value is out of the bounds of the specified page, this function will do nothing.
      *
-     * @see #setButton(int, SGButton)
-     * @param page The page to which the button should be added.
-     * @param slot The position on that page the button should be added at.
+     * @param page   The page to which the button should be added.
+     * @param slot   The position on that page the button should be added at.
      * @param button The button to add.
+     * @see #setButton(int, SGButton)
      */
     public void setButton(int page, int slot, SGButton button) {
         if (slot < 0 || slot > getPageSize())
@@ -464,7 +493,7 @@ public class SGMenu implements InventoryHolder {
      *
      * @param page The new current page of the inventory.
      */
-    public void setCurrentPage (int page) {
+    public void setCurrentPage(int page) {
         this.currentPage = page;
         if (this.onPageChange != null) this.onPageChange.accept(this);
     }
@@ -475,7 +504,14 @@ public class SGMenu implements InventoryHolder {
      * @return The highest page number that can be viewed.
      */
     public int getMaxPage() {
-        return (int) Math.ceil(((double) getHighestFilledSlot() + 1) / ((double) getPageSize()));
+        if (isAutomaticMaxPage) {
+            return (int) Math.ceil(((double) getHighestFilledSlot() + 1) / ((double) getPageSize()));
+        }
+        return maxPage;
+    }
+
+    public void setMaxPage(int maxPage) {
+        this.maxPage = maxPage;
     }
 
     /**
@@ -561,8 +597,8 @@ public class SGMenu implements InventoryHolder {
      * Un-marks a slot as sticky - thereby meaning that slot will display
      * whatever its value on the current page is.
      *
-     * @see #stickSlot(int)
      * @param slot The slot to un-mark as 'sticky'.
+     * @see #stickSlot(int)
      */
     public void unstickSlot(int slot) {
         this.stickiedSlots.remove(slot);
@@ -584,9 +620,9 @@ public class SGMenu implements InventoryHolder {
      * the same parameters as {@link #stickSlot(int)}), this will return
      * false.
      *
-     * @see #stickSlot(int)
      * @param slot The slot to check.
      * @return True if the slot is sticky, false if it isn't or the slot was out of bounds.
+     * @see #stickSlot(int)
      */
     public boolean isStickiedSlot(int slot) {
         if (slot < 0 || slot >= getPageSize())
@@ -609,8 +645,8 @@ public class SGMenu implements InventoryHolder {
     /// EVENTS ///
 
     /**
-     * @see #setOnClose(Consumer)
      * @return The action to be performed on close.
+     * @see #setOnClose(Consumer)
      */
     public Consumer<SGMenu> getOnClose() {
         return this.onClose;
@@ -628,8 +664,8 @@ public class SGMenu implements InventoryHolder {
     }
 
     /**
-     * @see #setOnPageChange(Consumer)
      * @return The action to be performed on page change.
+     * @see #setOnPageChange(Consumer)
      */
     public Consumer<SGMenu> getOnPageChange() {
         return this.onPageChange;
@@ -642,115 +678,6 @@ public class SGMenu implements InventoryHolder {
      */
     public void setOnPageChange(Consumer<SGMenu> onPageChange) {
         this.onPageChange = onPageChange;
-    }
-
-    /**
-     * Returns the permitted menu click types.
-     *
-     * @return A hashSet of permitted menu click types
-     */
-    public HashSet<ClickType> getPermittedMenuClickTypes() {
-        return this.permittedMenuClickTypes;
-    }
-
-    /**
-     * Returns an array of blocked menu actions for the current Inventory.
-     *
-     * @return A hashSet of blocked menu actions
-     */
-    public HashSet<InventoryAction> getBlockedMenuActions() {
-        return this.blockedMenuActions;
-    }
-
-    /**
-     * Returns the blocked adjacent actions for this object.
-     *
-     * @return A hashSet of InventoryAction objects representing the blocked adjacent actions.
-     */
-    public HashSet<InventoryAction> getBlockedAdjacentActions() {
-        return this.blockedAdjacentActions;
-    }
-
-    /**
-     * Sets the permitted menu click types.
-     *
-     * @param clickTypes One or more click types you want to allow for this menu.
-     */
-    public void setPermittedMenuClickTypes(ClickType... clickTypes) {
-        this.permittedMenuClickTypes = new HashSet<>(Arrays.asList(clickTypes));
-    }
-
-    /**
-     * Sets the blocked menu actions for the inventory.
-     *
-     * @param actions the menu actions to be blocked
-     */
-    public void setBlockedMenuActions(InventoryAction... actions) {
-        this.blockedMenuActions = new HashSet<>(Arrays.asList(actions));
-    }
-
-    /**
-     * Sets the blocked adjacent actions for this object.
-     *
-     * @param actions The actions to be blocked.
-     */
-    public void setBlockedAdjacentActions(InventoryAction... actions) {
-        this.blockedAdjacentActions = new HashSet<>(Arrays.asList(actions));
-    }
-
-    /**
-     * Adds a permitted click type to the menu.
-     *
-     * @param clickType the click type to be added
-     */
-    public void addPermittedClickType(ClickType clickType) {
-        this.permittedMenuClickTypes.add(clickType);
-    }
-
-    /**
-     * Adds the given InventoryAction to the list of blocked menu actions.
-     * Blocked menu actions are actions that are not allowed to be performed on the inventory menu.
-     *
-     * @param action The InventoryAction to be added to the blocked menu actions list.
-     */
-    public void addBlockedMenuAction(InventoryAction action) {
-        this.blockedMenuActions.add(action);
-    }
-
-    /**
-     * Adds a blocked adjacent action to the list of blocked adjacent actions.
-     *
-     * @param action The inventory action to be added as blocked adjacent action.
-     */
-    public void addBlockedAdjacentAction(InventoryAction action) {
-        this.getBlockedAdjacentActions().add(action);
-    }
-
-    /**
-     * Removes a permitted click type from the list of permitted menu click types.
-     *
-     * @param clickType the click type to be removed
-     */
-    public void removePermittedClickType(ClickType clickType) {
-        this.permittedMenuClickTypes.remove(clickType);
-    }
-
-    /**
-     * Removes the specified InventoryAction from the list of blocked menu actions.
-     *
-     * @param action the InventoryAction to be removed
-     */
-    public void removeBlockedMenuAction(InventoryAction action) {
-        this.blockedMenuActions.remove(action);
-    }
-
-    /**
-     * Removes the given action from the list of blocked adjacent actions.
-     *
-     * @param action The action to be removed
-     */
-    public void removeBlockedAdjacentAction(InventoryAction action) {
-        this.getBlockedAdjacentActions().remove(action);
     }
 
     /// INVENTORY API ///
@@ -767,25 +694,25 @@ public class SGMenu implements InventoryHolder {
         // If the open inventory isn't an SGMenu - or if it isn't this inventory, do nothing.
         if (
                 !(viewer.getOpenInventory().getTopInventory().getHolder() instanceof SGMenu)
-                || viewer.getOpenInventory().getTopInventory().getHolder() != this
+                        || viewer.getOpenInventory().getTopInventory().getHolder() != this
         ) return;
 
         // If the new size is different, we'll need to open a new inventory.
         if (viewer.getOpenInventory().getTopInventory().getSize() != getPageSize() + (getMaxPage() > 0 ? 9 : 0)) {
-            viewer.openInventory(getInventory());
+            viewer.openInventory(getInventoryForPlayer((Player) viewer));
             return;
         }
 
         // If the name has changed, we'll need to open a new inventory.
         String newName = name.replace("{currentPage}", String.valueOf(currentPage + 1))
-                             .replace("{maxPage}", String.valueOf(getMaxPage()));
+                .replace("{maxPage}", String.valueOf(getMaxPage()));
         if (!viewer.getOpenInventory().getTitle().equals(newName)) {
-            viewer.openInventory(getInventory());
+            viewer.openInventory(getInventoryForPlayer((Player) viewer));
             return;
         }
 
         // Otherwise, we can refresh the contents without re-opening the inventory.
-        viewer.getOpenInventory().getTopInventory().setContents(getInventory().getContents());
+        viewer.getOpenInventory().getTopInventory().setContents(getInventoryForPlayer((Player) viewer).getContents());
     }
 
     /**
@@ -796,32 +723,59 @@ public class SGMenu implements InventoryHolder {
      */
     @Override
     public Inventory getInventory() {
+        Inventory inventoryForPlayer = getInventoryForPlayer(null);
+        return inventoryForPlayer;
+    }
+
+    public Inventory getInventoryForPlayer(Player player) {
         boolean isAutomaticPaginationEnabled = spiGUI.isAutomaticPaginationEnabled();
+//        SGBarTemplate barTemplate = this.getBarTemplate();
+        List<SGBarTemplate> barTemplateRowsList = this.getBarTemplateList();
+//        boolean isTemplateBar = Objects.nonNull(barTemplate);
+        boolean isTemplateBar = !barTemplateRowsList.isEmpty();
         if (isAutomaticPaginationEnabled() != null) {
             isAutomaticPaginationEnabled = isAutomaticPaginationEnabled();
         }
 
         boolean needsPagination = getMaxPage() > 0 && isAutomaticPaginationEnabled;
 
-        Inventory inventory = Bukkit.createInventory(this, (
-            (needsPagination)
-                // Pagination enabled: add the bottom toolbar row.
-                ? getPageSize() + 9
-                // Pagination not required or disabled.
-                : getPageSize()
-        ),
-            name.replace("{currentPage}", String.valueOf(currentPage + 1))
-                .replace("{maxPage}", String.valueOf(getMaxPage()))
+        Inventory inventory = Bukkit.createInventory(this, prepareLines(needsPagination, barTemplateRowsList),
+                name.replace("{currentPage}", String.valueOf(currentPage + 1))
+                        .replace("{maxPage}", String.valueOf(getMaxPage()))
         );
 
+
+        if (isTemplateBar) {
+            barTemplateRowsList.forEach(bar -> {
+                int pageSize = getPageSize();
+                if (SGBarTemplateDirectionType.DOWN.equals(bar.getDirectionType())) {
+                    for (int i = pageSize; i < pageSize + 9; i++) {
+                        int offset = i - pageSize;
+                        setTemplateItems(bar, offset, inventory, i, player);
+                    }
+                }
+                if (SGBarTemplateDirectionType.UP.equals(bar.getDirectionType())) {
+                    for (int i = 0; i < 9; i++) {
+                        setTemplateItems(bar, i, inventory, i, player);
+                    }
+                }
+            });
+        }
+
         // Add the main inventory items.
-        for (int key = currentPage * getPageSize(); key < (currentPage + 1) * getPageSize(); key++) {
+        for (int key = (currentPage * getPageSize()) - (getStartRow() * 9); key < (currentPage + 1) * getPageSize(); key++) {
             // If we've already reached the maximum assigned slot, stop assigning
             // slots.
             if (key > getHighestFilledSlot()) break;
 
             if (items.containsKey(key)) {
-                inventory.setItem(key - (currentPage * getPageSize()), items.get(key).getIcon());
+                int position;
+                if (isTemplateBar) {
+                    position = key - (currentPage * getPageSize()) + 9;
+                } else {
+                    position = key - (currentPage * getPageSize());
+                }
+                inventory.setItem(position, items.get(key).getIcon());
             }
         }
 
@@ -838,17 +792,42 @@ public class SGMenu implements InventoryHolder {
             }
 
             int pageSize = getPageSize();
+            if (isTemplateBar) {
+                pageSize += 9;
+            }
+
             for (int i = pageSize; i < pageSize + 9; i++) {
                 int offset = i - pageSize;
 
                 SGButton paginationButton = toolbarButtonBuilder.buildToolbarButton(
-                    offset, getCurrentPage(), SGToolbarButtonType.getDefaultForSlot(offset),this
+                        offset, getCurrentPage(), SGToolbarButtonType.getDefaultForSlot(offset), this
                 );
                 inventory.setItem(i, paginationButton != null ? paginationButton.getIcon() : null);
             }
         }
 
+        if (player != null) {
+            currentMenus.put(player.getUniqueId(), this);
+        }
+
         return inventory;
+    }
+
+    private void setTemplateItems(SGBarTemplateBuilder barTemplateBuilder, int offset, Inventory inventory, int i, Player player) {
+        SGButton button = barTemplateBuilder.buildBarTemplateButton(offset, getCurrentPage(), this, spiGUI, player);
+        inventory.setItem(i, button != null ? button.getIcon() : null);
+    }
+
+    private int prepareLines(boolean needPagination, List<SGBarTemplate> needBarTemplate) {
+        int lines = getPageSize();
+        if (needPagination) {
+            lines += 9;
+        }
+        if (!needBarTemplate.isEmpty()) {
+            lines += 9 * needBarTemplate.size();
+        }
+        return lines;
+
     }
 
 }

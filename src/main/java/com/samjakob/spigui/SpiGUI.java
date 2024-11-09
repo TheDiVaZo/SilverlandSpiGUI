@@ -1,10 +1,14 @@
 package com.samjakob.spigui;
 
+import com.samjakob.spigui.buttons.SGButton;
 import com.samjakob.spigui.menu.SGMenu;
 import com.samjakob.spigui.menu.SGMenuListener;
 import com.samjakob.spigui.menu.SGOpenMenu;
+import com.samjakob.spigui.item.ItemBuilder;
+import com.samjakob.spigui.toolbar.SGBarTemplateBuilder;
 import com.samjakob.spigui.toolbar.SGDefaultToolbarBuilder;
 import com.samjakob.spigui.toolbar.SGToolbarBuilder;
+import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -63,6 +67,8 @@ public class SpiGUI {
      */
     private SGToolbarBuilder defaultToolbarBuilder = new SGDefaultToolbarBuilder();
 
+    private SGBarTemplateBuilder barTemplateBuilder;
+
     /**
      * Creates an instance of the SpiGUI library associated with a given plugin.
      * <br><br>
@@ -107,7 +113,7 @@ public class SpiGUI {
     }
 
     /**
-     * An alias for {@link #create(String, int, String)} with the tag set to null.
+     * An alias for {@link #create(String, int, String, boolean)} with the tag set to null.
      * Use this method if you don't need the tag, or you don't know what it's for.
      * <br>
      * The rows parameter is used in place of the size parameter of the
@@ -127,7 +133,7 @@ public class SpiGUI {
      * @return The created inventory.
      */
     public SGMenu create(String name, int rows) {
-        return create(name, rows, null);
+        return create(name, rows, null, true);
     }
 
     /**
@@ -169,8 +175,8 @@ public class SpiGUI {
      * @param tag The inventory's tag.
      * @return The created inventory.
      */
-    public SGMenu create(String name, int rows, String tag) {
-        return new SGMenu(plugin, this, name, rows, tag);
+    public SGMenu create(String name, int rows, String tag, boolean isAutomaticMaxPage) {
+        return new SGMenu(plugin, this, name, rows, tag, isAutomaticMaxPage);
     }
 
     /**
@@ -225,6 +231,14 @@ public class SpiGUI {
      */
     public SGToolbarBuilder getDefaultToolbarBuilder() {
         return defaultToolbarBuilder;
+    }
+
+    public void setBarTemplateBuilder(SGBarTemplateBuilder barTemplateBuilder) {
+        this.barTemplateBuilder = barTemplateBuilder;
+    }
+
+    public SGBarTemplateBuilder getBarTemplateBuilder() {
+        return barTemplateBuilder;
     }
 
     /**
