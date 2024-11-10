@@ -5,20 +5,19 @@ import com.samjakob.spigui.buttons.SGButton;
 import com.samjakob.spigui.toolbar.SGBarTemplate;
 import com.samjakob.spigui.toolbar.SGToolbarBuilder;
 import com.samjakob.spigui.toolbar.SGToolbarButtonType;
+import com.samjakob.spigui.util.SlotUtil;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.*;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryView;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 
 /**
  * The {@link SGMenuListener} handles SpiGUI events on behalf of a plugin that
@@ -29,6 +28,8 @@ import java.util.Set;
  * your plugin instance to SpiGUI's constructor.
  */
 public class SGMenuListener implements Listener {
+
+    protected final Map<Player, Map<Integer, SGButton>> openedSessions = new HashMap<>();
 
     /**
      * Any click types not in this array will be immediately prevented in
@@ -214,16 +215,26 @@ public class SGMenuListener implements Listener {
             return;
         }
 
+        Map<Integer, SGButton> buttons;
+
+        if (openedSessions.containsKey((Player) event.getWhoClicked())) {
+            buttons = openedSessions.get((Player) event.getWhoClicked());
+        }
+        else {
+            buttons = clickedGui.getViewItems();
+            openedSessions.put((Player) event.getWhoClicked(), buttons);
+        }
+
         // If the slot is a stickied slot, get the button from page 0.
         if (clickedGui.isStickiedSlot(event.getSlot())) {
-            SGButton button = clickedGui.getButton(0, event.getSlot());
+            SGButton button = SlotUtil.getButton(buttons, 0, event.getSlot(), clickedGui.getPageSize());
             if (button != null && button.getListener() != null) button.getListener().onClick(event);
             return;
         }
 
         int offset = clickedGui.getStartRow() * 9;
         // Otherwise, get the button normally.
-        SGButton button = clickedGui.getButton(clickedGui.getCurrentPage(), event.getSlot() - offset);
+        SGButton button = SlotUtil.getButton(buttons, clickedGui.getCurrentPage(), event.getSlot() - offset, clickedGui.getPageSize());
         if (button != null && button.getListener() != null) {
             button.getListener().onClick(event);
         }
@@ -330,6 +341,13 @@ public class SGMenuListener implements Listener {
         if (clickedGui.getOnClose() != null)
             clickedGui.getOnClose().accept(clickedGui);
 
+        openedSessions.remove((Player) event.getPlayer());
+
+    }
+
+    @EventHandler
+    public void onLeavePlayer(PlayerQuitEvent event) {
+        openedSessions.remove(event.getPlayer());
     }
 
     /**

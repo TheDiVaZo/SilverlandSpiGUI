@@ -3,6 +3,7 @@ package com.samjakob.spigui.menu;
 import com.samjakob.spigui.SpiGUI;
 import com.samjakob.spigui.buttons.SGButton;
 import com.samjakob.spigui.toolbar.*;
+import com.samjakob.spigui.util.SlotUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.entity.HumanEntity;
@@ -66,6 +67,8 @@ public class SGMenu implements InventoryHolder {
      * The map of items in the inventory.
      */
     private final Map<Integer, SGButton> items;
+
+    private final Map<Integer, SGButton> viewItems;
     /**
      * The set of sticky slots (that should remain when the page is changed).
      */
@@ -125,11 +128,16 @@ public class SGMenu implements InventoryHolder {
         this.tag = tag;
 
         this.items = new HashMap<>();
+        this.viewItems = Collections.unmodifiableMap(items);
         this.stickiedSlots = new HashSet<>();
 
         this.currentPage = 0;
 
         this.isAutomaticMaxPage = isAutomaticMaxPage;
+    }
+
+    public Map<Integer, SGButton> getViewItems() {
+        return viewItems;
     }
 
     /// INVENTORY SETTINGS ///
@@ -453,10 +461,7 @@ public class SGMenu implements InventoryHolder {
      * @return The {@link SGButton} that was in that slot or null if the slot was invalid or if there was no button that slot.
      */
     public SGButton getButton(int slot) {
-        if (slot < 0 || slot > getHighestFilledSlot())
-            return null;
-
-        return items.get(slot);
+        return SlotUtil.getButton(viewItems, slot, getHighestFilledSlot());
     }
 
     /**
@@ -468,10 +473,7 @@ public class SGMenu implements InventoryHolder {
      * @return The {@link SGButton} that was in that slot or null if the slot was invalid or if there was no button that slot.
      */
     public SGButton getButton(int page, int slot) {
-        if (slot < 0 || slot > getPageSize())
-            return null;
-
-        return getButton((page * getPageSize()) + slot);
+        return SlotUtil.getButton(viewItems, page, slot, getPageSize());
     }
 
     /// PAGINATION ///
