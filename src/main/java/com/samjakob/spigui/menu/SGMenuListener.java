@@ -220,14 +220,14 @@ public class SGMenuListener implements Listener {
         Map<Integer, SGButton> buttons;
 
         if (openedSessions.containsKey(event.getWhoClicked().getUniqueId())) {
-            Bukkit.getLogger().info("Get from session");
+//            Bukkit.getLogger().info("Get from session");
             buttons = openedSessions.get(event.getWhoClicked().getUniqueId());
-            Bukkit.getLogger().info("Get session buttons number + "+buttons.size());
+//            Bukkit.getLogger().info("Get session buttons number + "+buttons.size());
         }
         else {
-            Bukkit.getLogger().info("Save from session");
+//            Bukkit.getLogger().info("Save from session");
             buttons = clickedGui.getViewItems();
-            Bukkit.getLogger().info("save session buttons number + "+buttons.size());
+//            Bukkit.getLogger().info("save session buttons number + "+buttons.size());
             openedSessions.put(event.getWhoClicked().getUniqueId(), new HashMap<>(buttons));
         }
 
@@ -284,9 +284,9 @@ public class SGMenuListener implements Listener {
         SGMenu clickedGui = (SGMenu) event.getInventory().getHolder();
 
         if (!openedMenu.containsKey(event.getPlayer().getUniqueId()) || openedMenu.containsKey(event.getPlayer().getUniqueId()) && !openedMenu.get(event.getPlayer().getUniqueId()).equals(clickedGui)) {
-            Bukkit.getLogger().info("inv open save from session");
+//            Bukkit.getLogger().info("inv open save from session");
             Map<Integer, SGButton> buttons = clickedGui.getViewItems();
-            Bukkit.getLogger().info("inv open save session buttons number + "+buttons.size());
+//            Bukkit.getLogger().info("inv open save session buttons number + "+buttons.size());
             openedSessions.put(event.getPlayer().getUniqueId(), new HashMap<>(buttons));
             openedMenu.put(event.getPlayer().getUniqueId(), clickedGui);
         }
