@@ -6,6 +6,7 @@ import com.samjakob.spigui.toolbar.SGBarTemplate;
 import com.samjakob.spigui.toolbar.SGToolbarBuilder;
 import com.samjakob.spigui.toolbar.SGToolbarButtonType;
 import com.samjakob.spigui.util.SlotUtil;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
@@ -29,7 +30,8 @@ import java.util.*;
  */
 public class SGMenuListener implements Listener {
 
-    protected final Map<Player, Map<Integer, SGButton>> openedSessions = new HashMap<>();
+    protected final Map<UUID, Map<Integer, SGButton>> openedSessions = new HashMap<>();
+    protected final Map<UUID, SGMenu> openedMenu = new HashMap<>();
 
     /**
      * Any click types not in this array will be immediately prevented in
@@ -217,12 +219,16 @@ public class SGMenuListener implements Listener {
 
         Map<Integer, SGButton> buttons;
 
-        if (openedSessions.containsKey((Player) event.getWhoClicked())) {
-            buttons = openedSessions.get((Player) event.getWhoClicked());
+        if (openedSessions.containsKey(event.getWhoClicked().getUniqueId())) {
+            Bukkit.getLogger().info("Get from session");
+            buttons = openedSessions.get(event.getWhoClicked().getUniqueId());
+            Bukkit.getLogger().info("Get session buttons number + "+buttons.size());
         }
         else {
+            Bukkit.getLogger().info("Save from session");
             buttons = clickedGui.getViewItems();
-            openedSessions.put((Player) event.getWhoClicked(), buttons);
+            Bukkit.getLogger().info("save session buttons number + "+buttons.size());
+            openedSessions.put(event.getWhoClicked().getUniqueId(), new HashMap<>(buttons));
         }
 
         // If the slot is a stickied slot, get the button from page 0.
@@ -268,6 +274,22 @@ public class SGMenuListener implements Listener {
             event.setResult(Event.Result.DENY);
         }
 
+    }
+
+    @EventHandler
+    public void onInventoryOpen(InventoryOpenEvent event) {
+        if (shouldIgnoreInventoryEvent(event.getInventory())) return;
+
+        // Get the instance of the SpiGUI that was clicked.
+        SGMenu clickedGui = (SGMenu) event.getInventory().getHolder();
+
+        if (!openedMenu.containsKey(event.getPlayer().getUniqueId()) || openedMenu.containsKey(event.getPlayer().getUniqueId()) && !openedMenu.get(event.getPlayer().getUniqueId()).equals(clickedGui)) {
+            Bukkit.getLogger().info("inv open save from session");
+            Map<Integer, SGButton> buttons = clickedGui.getViewItems();
+            Bukkit.getLogger().info("inv open save session buttons number + "+buttons.size());
+            openedSessions.put(event.getPlayer().getUniqueId(), new HashMap<>(buttons));
+            openedMenu.put(event.getPlayer().getUniqueId(), clickedGui);
+        }
     }
 
     /**
@@ -341,13 +363,15 @@ public class SGMenuListener implements Listener {
         if (clickedGui.getOnClose() != null)
             clickedGui.getOnClose().accept(clickedGui);
 
-        openedSessions.remove((Player) event.getPlayer());
+        openedSessions.remove(event.getPlayer().getUniqueId());
+        openedMenu.remove(event.getPlayer().getUniqueId());
 
     }
 
     @EventHandler
     public void onLeavePlayer(PlayerQuitEvent event) {
-        openedSessions.remove(event.getPlayer());
+        openedSessions.remove(event.getPlayer().getUniqueId());
+        openedMenu.remove(event.getPlayer().getUniqueId());
     }
 
     /**
