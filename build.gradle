@@ -47,15 +47,6 @@ tasks.register('testJar', Jar) {
 
     archiveBaseName.set("SpiGUITest")
 }
-
-
-publishing {
-    publications {
-        maven(MavenPublication) {
-            from components.java
-        }
-    }
-}
 //signing {
 //    useGpgCmd()
 //    sign publishing.publications.SpiGUI
@@ -70,4 +61,29 @@ javadoc {
     classpath += configurations.compileClasspath
 
     options.memberLevel = JavadocMemberLevel.PRIVATE
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            // Specify the components to publish
+            from components.java
+            //artifact sourcesJar
+            //artifact javadocJar
+
+            // Customize the artifact details
+            groupId = 'com.samjakob'
+            artifactId = 'SpiGUI'
+            version = '1.4.0-custom'
+        }
+    }
+    repositories {
+        mavenLocal() // Publish to the local Maven repository (~/.m2/repository)
+    }
+}
+
+// Task to generate source JAR (optional)
+task sourceJar(type: Jar) {
+    from sourceSets.main.allSource
+    archiveClassifier.set('sources')
 }
